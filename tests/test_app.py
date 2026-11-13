@@ -23,7 +23,11 @@ def client(tmp_path, monkeypatch):
 
 
 def test_home_and_language_catalog(client):
-    assert client.get("/").status_code == 200
+    home = client.get("/")
+    assert home.status_code == 200
+    assert b"/static/js/app.js?v=" in home.data
+    assert b"/static/js/speech.js?v=" in home.data
+    assert b"/static/css/style.css?v=" in home.data
     response = client.get("/api/languages")
     assert response.status_code == 200
     languages = response.get_json()["languages"]

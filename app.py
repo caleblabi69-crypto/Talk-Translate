@@ -1,5 +1,6 @@
 """Application Flask de traduction vocale Talk-Translate."""
 
+import hashlib
 import logging
 import os
 import threading
@@ -85,6 +86,11 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         app.config.update(test_config)
     if not app.config.get("SECRET_KEY"):
         app.config["SECRET_KEY"] = os.urandom(32)
+    asset_files = ("css/style.css", "js/speech.js", "js/app.js")
+    asset_content = b"".join(
+        (Path(app.static_folder) / asset_file).read_bytes() for asset_file in asset_files
+    )
+    app.config["ASSET_VERSION"] = hashlib.sha256(asset_content).hexdigest()[:12]
     if app.config.get("TRUST_PROXY"):
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
     app.config["RATE_LIMIT_BUCKET_ID"] = uuid.uuid4().hex
@@ -123,7 +129,11 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     @app.get("/")
     def index() -> str:
-        return render_template("index.html", max_text_length=app.config["MAX_TEXT_LENGTH"])
+        return render_template(
+            "index.html",
+            max_text_length=app.config["MAX_TEXT_LENGTH"],
+            asset_version=app.config["ASSET_VERSION"],
+        )
 
     @app.get("/api/languages")
     def languages() -> ResponseReturnValue:
