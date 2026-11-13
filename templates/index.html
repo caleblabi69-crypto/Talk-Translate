@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7f4">
+  <meta name="description" content="Traduisez vos conversations en parlant ou en écrivant.">
+  <title>Talk Translate — Parlez sans frontières</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script defer src="{{ url_for('static', filename='js/speech.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
+</head>
+<body>
+  <!--
+  THESIS: An easy, two-way translation tool for travelers, not a feature dashboard.
+  OWN-WORLD: Quiet white space, soft paper surfaces, one leaf-green accent, and clear paired language controls.
+  STORY: Choose the languages, speak or type, then listen, save, or pass the turn to your companion.
+  FIRST VIEWPORT: Brand and theme at top, a short invitation, then the centered translator with language pair, microphone, text field, and result.
+  FORM: A focused single-page work surface; conversation mode alternates the same microphone between the chosen languages.
+  -->
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Talk Translate, accueil">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none"><path d="M16 5v22M9 10v12M23 10v12M4 13v6M28 13v6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>
+        </span>
+        <span>talk translate<span class="brand-period">.</span></span>
+      </a>
+      <div class="topbar-actions">
+        <span class="privacy-note"><span class="privacy-dot"></span>Micro géré par le navigateur</span>
+        <button id="theme-toggle" class="icon-button theme-button" type="button" aria-label="Activer le thème sombre" title="Changer le thème">
+          <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
+          <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.1A8.3 8.3 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <section class="intro" aria-labelledby="page-title">
+        <h1 id="page-title">Parlez. <span>La conversation suit.</span></h1>
+        <p>Les bons mots, dans la bonne langue.</p>
+      </section>
+
+      <section class="translator" aria-label="Traducteur vocal">
+        <div class="language-row">
+          <label class="language-choice">
+            <span class="field-label">VOUS PARLEZ</span>
+            <span class="select-wrap">
+              <span class="language-flag" id="source-flag" aria-hidden="true">✨</span>
+              <select id="source-language" aria-label="Langue source">
+                <option value="auto" selected>Détection auto</option>
+              </select>
+              <svg class="select-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+            </span>
+          </label>
+          <button id="swap-languages" class="swap-button" type="button" aria-label="Inverser les langues">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13m0 0-4-4m4 4-4 4M17 17H4m0 0 4 4m-4-4 4-4"/></svg>
+          </button>
+          <label class="language-choice">
+            <span class="field-label">TRADUCTION</span>
+            <span class="select-wrap">
+              <span class="language-flag" id="target-flag" aria-hidden="true">🇬🇧</span>
+              <select id="target-language" aria-label="Langue cible"></select>
+              <svg class="select-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+            </span>
+          </label>
+        </div>
+
+        <div class="voice-stage">
+          <span class="voice-orbit orbit-outer" aria-hidden="true"></span>
+          <span class="voice-orbit orbit-inner" aria-hidden="true"></span>
+          <button id="microphone" class="mic-button" type="button" aria-label="Démarrer la reconnaissance vocale" aria-pressed="false">
+            <svg class="mic-icon" viewBox="0 0 32 32" aria-hidden="true"><rect x="11" y="4" width="10" height="17" rx="5"/><path d="M7 15v1a9 9 0 0 0 18 0v-1M16 25v4m-5 0h10"/></svg>
+          </button>
+          <p id="voice-status" class="voice-status" role="status" aria-live="polite">Touchez pour parler</p>
+          <p id="speech-preview" class="speech-preview" aria-live="polite"></p>
+        </div>
+
+        <div class="voice-controls">
+          <button id="conversation-toggle" class="conversation-toggle" type="button" aria-pressed="false" aria-controls="conversation-panel">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h11m0 0-3-3m3 3-3 3m5 5H6m0 0 3 3m-3-3 3-3"/></svg>
+            <span>Mode conversation</span>
+          </button>
+          <span class="voice-hint">ou écrivez ci-dessous</span>
+        </div>
+
+        <div id="conversation-panel" class="conversation-panel" hidden>
+          <p class="conversation-note">Les micros alternent après chaque phrase.</p>
+          <div class="conversation-buttons">
+            <button type="button" class="conversation-mic active" data-side="source" aria-label="Utiliser le microphone pour vous" aria-pressed="true">
+              <span class="conversation-side">Vous</span><span class="conversation-language" id="conversation-source-name">Français</span><svg class="conversation-mic-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1m-7 8v3m-4 0h8"/></svg>
+            </button>
+            <button type="button" class="conversation-mic" data-side="target" aria-label="Utiliser le microphone pour votre interlocuteur" aria-pressed="false">
+              <span class="conversation-side">Votre interlocuteur</span><span class="conversation-language" id="conversation-target-name">Anglais</span><svg class="conversation-mic-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1m-7 8v3m-4 0h8"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="divider"><span>Votre message</span></div>
+        <div class="input-panel">
+          <label class="visually-hidden" for="source-text">Texte à traduire</label>
+          <textarea id="source-text" maxlength="{{ max_text_length }}" rows="3" placeholder="Écrivez ou collez votre texte ici…" aria-describedby="char-count"></textarea>
+          <div class="input-meta">
+            <span id="char-count">0 / {{ max_text_length }}</span>
+            <div class="input-actions">
+              <button id="clear-text" type="button" class="clear-button" disabled>Effacer</button>
+              <button id="translate-button" class="translate-button" type="button" disabled>
+                <span>Traduire</span>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <p class="keyboard-hint">Raccourcis : <kbd>Ctrl</kbd> + <kbd>Entrée</kbd> pour traduire <span aria-hidden="true">·</span> <kbd>Ctrl</kbd> + <kbd>L</kbd> pour effacer</p>
+        <div id="error-message" class="error-message" role="alert" hidden></div>
+
+        <section id="translation-card" class="translation-card" aria-label="Traduction" hidden>
+          <div class="translation-heading">
+            <div class="translation-title"><span class="result-mark" aria-hidden="true">↳</span><h2>Traduction</h2><span id="detected-label" class="detected-label"></span></div>
+            <div class="translation-actions">
+              <button id="speak-button" class="result-action speak-action" type="button" aria-label="Écouter la traduction" title="Écouter">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Zm4 4a5 5 0 0 1 0 6m3-9a9 9 0 0 1 0 12"/></svg>
+              </button>
+              <button id="audio-stop-button" class="result-action" type="button" aria-label="Arrêter la lecture" title="Arrêter">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10H7z"/></svg>
+              </button>
+              <button id="slow-speak-button" class="result-action" type="button" aria-label="Écouter lentement" title="Écouter lentement"><span class="slow-icon">½</span></button>
+              <button id="copy-button" class="result-action" type="button" aria-label="Copier la traduction" title="Copier">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
+              </button>
+              <button id="favorite-button" class="result-action" type="button" aria-label="Ajouter aux favoris" aria-pressed="false" title="Ajouter aux favoris">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></svg>
+              </button>
+              <button id="share-button" class="result-action" type="button" aria-label="Partager la traduction" title="Partager">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.6 6.8-4.2m-6.8 7 6.8 4.2"/></svg>
+              </button>
+            </div>
+          </div>
+          <p id="translation-text" class="translation-text" aria-live="polite"></p>
+          <div class="result-footer"><span id="translation-languages"></span><span id="audio-status" role="status"></span></div>
+        </section>
+      </section>
+
+      <div class="history-trigger-row">
+        <button id="history-toggle" class="history-trigger" type="button" aria-expanded="false" aria-controls="history-panel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8m0-5v5h5m4-1v5l3 2"/></svg>
+          <span>Historique</span>
+          <svg class="history-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+        </button>
+      </div>
+    </main>
+
+    <footer class="page-footer"><span>Talk Translate</span><span>Reconnaissance vocale dans votre navigateur</span></footer>
+  </div>
+
+  <div id="panel-backdrop" class="panel-backdrop" hidden></div>
+  <aside id="history-panel" class="history-panel" role="dialog" aria-modal="true" aria-label="Historique et favoris" aria-hidden="true">
+    <div class="panel-header">
+      <div><p class="panel-kicker">Vos échanges</p><h2>Retrouver un mot</h2></div>
+      <button id="close-history" class="icon-button close-button" type="button" aria-label="Fermer le panneau">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="panel-tabs" role="tablist" aria-label="Contenu du panneau">
+      <button id="history-tab" class="panel-tab active" type="button" role="tab" aria-selected="true" aria-controls="panel-list">Historique</button>
+      <button id="favorites-tab" class="panel-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-list">Favoris</button>
+    </div>
+    <div class="panel-list" id="panel-list" role="tabpanel" aria-labelledby="history-tab"></div>
+    <div class="panel-footer">
+      <button id="clear-list" class="clear-list-button" type="button">Vider l’historique</button>
+      <p>Enregistré localement sur cet appareil.</p>
+    </div>
+  </aside>
+</body>
+</html>
