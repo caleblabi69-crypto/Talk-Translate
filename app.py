@@ -18,7 +18,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 import config
 from services import storage
 from services.languages import get_languages, is_supported_language
-from services.translator import TranslationUnavailableError, translate_text
+from services.translator import TranslationUnavailableError, detect_language, translate_text
 from services.tts import generate_speech
 
 logger = logging.getLogger(__name__)
@@ -129,6 +129,24 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     def languages() -> ResponseReturnValue:
         return jsonify({"languages": get_languages()})
 
+    @app.post("/api/languages/detect")
+    def detect_source_language() -> ResponseReturnValue:
+        data = _request_data()
+        if data is None:
+            return _error("Envoyez un objet JSON valide.", 400)
+        text = data.get("text")
+        validation_error = _validate_text(text)
+        if validation_error:
+            return _error(validation_error, 400)
+        try:
+            detected_source = detect_language(text)
+        except TranslationUnavailableError:
+            return _error(
+                "La langue est difficile à détecter automatiquement. Choisissez-la dans la liste.",
+                400,
+            )
+        return jsonify({"detected_source": detected_source})
+
     @app.post("/api/translate")
     def translate() -> ResponseReturnValue:
         data = _request_data()
@@ -212,6 +230,35 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         return jsonify(
             {"history": storage.list_history(_database_path(), _owner_id(), app.config["HISTORY_LIMIT"])}
         )
+
+    @app.post("/api/history")
+    def save_history_item() -> ResponseReturnValue:
+        data = _request_data()
+        if data is None:
+            return _error("Envoyez un objet JSON valide.", 400)
+        text, translation = data.get("text"), data.get("translation")
+        validation_error = _validate_text(text)
+        if validation_error:
+            return _error(validation_error, 400)
+        if not isinstance(translation, str) or not translation.strip():
+            return _error("La traduction ne peut pas être vide.", 400)
+        if len(translation) > app.config["MAX_TEXT_LENGTH"] * 4:
+            return _error("La traduction est trop longue.", 400)
+        source, target = data.get("source"), data.get("target")
+        if not is_supported_language(source, allow_auto=True):
+            return _error("La langue source est inconnue.", 400)
+        if not is_supported_language(target):
+            return _error("La langue cible est inconnue.", 400)
+        item_id = storage.add_history(
+            _database_path(),
+            _owner_id(),
+            text.strip(),
+            translation.strip(),
+            source,
+            target,
+            app.config["HISTORY_LIMIT"],
+        )
+        return jsonify({"history_id": item_id}), 201
 
     @app.delete("/api/history/<int:item_id>")
     def remove_history_item(item_id: int) -> ResponseReturnValue:

@@ -39,7 +39,7 @@ class TranslationUnavailableError(RuntimeError):
         super().__init__("Le fournisseur de traduction de secours est indisponible.")
 
 
-def _detect_language(text: str) -> str:
+def detect_language(text: str) -> str:
     if len(text.strip()) < 12:
         raise TranslationUnavailableError()
     try:
@@ -62,7 +62,7 @@ def _translate_cached(text: str, source: str, target: str) -> tuple[str, str | N
     except Exception:
         logger.exception("Google Translate indisponible (%s vers %s); essai MyMemory", source, target)
 
-    detected_source = _detect_language(text) if source == "auto" else source
+    detected_source = detect_language(text) if source == "auto" else source
     try:
         translation = MyMemoryTranslator(
             source=MYMEMORY_LANGUAGES[detected_source],

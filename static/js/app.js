@@ -73,7 +73,9 @@
       } catch (_error) {
         message = "Le serveur a renvoyé une réponse illisible.";
       }
-      throw new Error(message);
+      const error = new Error(message);
+      error.status = response.status;
+      throw error;
     }
     return response;
   }
@@ -85,6 +87,37 @@
       body: data === undefined ? undefined : JSON.stringify(data)
     });
     return response.json();
+  }
+
+  async function translateWithBrowserFallback(text, source, target) {
+    let detectedSource = source;
+    if (source === "auto") {
+      const detected = await jsonRequest("/api/languages/detect", "POST", { text });
+      detectedSource = detected.detected_source;
+    }
+
+    const query = new URLSearchParams({
+      q: text,
+      langpair: `${detectedSource}|${target}`
+    });
+    const response = await fetch(`https://api.mymemory.translated.net/get?${query}`);
+    if (!response.ok) throw new Error("Le service de secours n’est pas disponible depuis ce téléphone.");
+    const payload = await response.json();
+    const translation = payload.responseData?.translatedText;
+    if (payload.responseStatus !== 200 || !translation || payload.quotaFinished) {
+      throw new Error("Le quota gratuit de traduction est atteint. Réessayez plus tard.");
+    }
+    const saved = await jsonRequest("/api/history", "POST", {
+      text,
+      translation,
+      source,
+      target
+    });
+    return {
+      translation,
+      detected_source: source === "auto" ? detectedSource : null,
+      history_id: saved.history_id
+    };
   }
 
   function language(code) {
@@ -244,7 +277,13 @@
     try {
       const source = overrides?.source || elements.source.value;
       const target = overrides?.target || elements.target.value;
-      const result = await jsonRequest("/api/translate", "POST", { text: content, source, target });
+      let result;
+      try {
+        result = await jsonRequest("/api/translate", "POST", { text: content, source, target });
+      } catch (error) {
+        if (![502, 503].includes(error.status)) throw error;
+        result = await translateWithBrowserFallback(content, source, target);
+      }
       if (requestId !== state.translationRequest) return;
       state.translation = result.translation;
       state.translationSource = source;

@@ -61,6 +61,33 @@ def test_translation_adds_to_history(client):
     assert history[0]["text"] == "Bonjour"
 
 
+def test_local_source_detection_for_browser_fallback(client):
+    response = client.post(
+        "/api/languages/detect",
+        json={"text": "Bonjour, comment allez-vous aujourd’hui ?"},
+    )
+    assert response.status_code == 200
+    assert response.get_json() == {"detected_source": "fr"}
+    ambiguous = client.post("/api/languages/detect", json={"text": "Hola"})
+    assert ambiguous.status_code == 400
+
+
+def test_browser_fallback_can_persist_translation_in_history(client):
+    response = client.post(
+        "/api/history",
+        json={
+            "text": "Bonjour",
+            "translation": "Hello",
+            "source": "fr",
+            "target": "en",
+        },
+    )
+    assert response.status_code == 201
+    history = client.get("/api/history").get_json()["history"]
+    assert history[0]["id"] == response.get_json()["history_id"]
+    assert history[0]["translation"] == "Hello"
+
+
 def test_history_deletion(client):
     item_id = client.post(
         "/api/translate", json={"text": "Bonjour", "source": "fr", "target": "en"}
