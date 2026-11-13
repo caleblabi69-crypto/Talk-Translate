@@ -1,6 +1,6 @@
 # Talk Translate
 
-Application web de traduction vocale conçue pour aider les voyageurs à échanger en face à face. Parlez dans le navigateur ou saisissez un texte, écoutez la traduction et utilisez le mode conversation pour alterner les tours de parole. Le serveur Flask utilise `deep-translator` (Google Translate sans clé API), `gTTS` pour produire les MP3 et SQLite pour l'historique et les favoris.
+Application web de traduction vocale conçue pour aider les voyageurs à échanger en face à face. Parlez dans le navigateur ou saisissez un texte, écoutez la traduction et utilisez le mode conversation pour alterner les tours de parole. Le serveur Flask utilise `deep-translator` (Google Translate avec MyMemory en secours), `gTTS` pour produire les MP3 et SQLite pour l'historique et les favoris.
 
 ## Fonctionnalités
 
@@ -37,7 +37,7 @@ Ouvrez <http://127.0.0.1:5000>. Le serveur écoute sur `0.0.0.0` pour les essais
 
 ## Reconnaissance vocale et confidentialité
 
-La reconnaissance se fait dans le navigateur via Web Speech API. La prise en charge, les langues offertes et le traitement audio varient selon le navigateur et son service vocal; Chrome et Edge sont généralement les mieux équipés. L'application n'enregistre ni n'envoie le flux audio elle-même, mais le navigateur peut transmettre l'audio à son propre service de reconnaissance. Le texte transcrit est envoyé au serveur Flask puis à GoogleTranslator pour traduction; le texte traduit est envoyé à gTTS pour produire l'audio. L'historique et les favoris sont conservés dans le fichier SQLite de l'instance.
+La reconnaissance se fait dans le navigateur via Web Speech API. La prise en charge, les langues offertes et le traitement audio varient selon le navigateur et son service vocal; Chrome et Edge sont généralement les mieux équipés. L'application n'enregistre ni n'envoie le flux audio elle-même, mais le navigateur peut transmettre l'audio à son propre service de reconnaissance. Le texte transcrit est envoyé au serveur Flask puis à GoogleTranslator; si Google est indisponible, il est envoyé à MyMemory comme solution de secours. La détection locale de langue (langdetect) sert à choisir la source dans ce chemin de secours. Le texte traduit est envoyé à gTTS pour produire l'audio. L'historique et les favoris sont conservés dans le fichier SQLite de l'instance.
 
 Il n'y a pas de compte : chaque navigateur reçoit un identifiant aléatoire conservé dans un cookie signé, HttpOnly et isolé de ceux des autres navigateurs. Historique et favoris sont séparés entre navigateurs, mais restent enregistrés sur le serveur; effacer les cookies du navigateur fait perdre l'accès à ses anciennes entrées. N'utilisez pas une instance publique pour des conversations sensibles.
 
@@ -61,7 +61,7 @@ Les erreurs ont le format `{ "error": "message explicite" }`. Les codes de langu
 | `DELETE` | `/api/favorites` | Efface tous les favoris |
 | `DELETE` | `/api/favorites/<id>` | Efface un favori |
 
-Quand la source est `auto`, `detected_source` vaut `null` : l'API publique de GoogleTranslator n'expose pas le code de langue effectivement détecté. L'application n'invente donc pas cette information.
+Quand la source est `auto`, GoogleTranslator ne fournit pas son code de langue détecté : `detected_source` vaut donc `null` si Google répond. En secours MyMemory, l'application détecte localement les textes suffisamment longs et renvoie le code probable; pour une phrase trop courte ou ambiguë, choisissez la langue source manuellement.
 
 ## Tests
 
@@ -77,7 +77,7 @@ python -m pytest
 
 Le dépôt contient `render.yaml` pour créer automatiquement le Web Service. Dans Render, choisissez **New > Blueprint**, connectez le dépôt GitHub et sélectionnez la branche `caleblabi69-crypto-traduction-vocale`. Le Blueprint génère la clé de signature des cookies et configure HTTPS; Render fournit ensuite une URL publique `https://…onrender.com`. Le service utilise `gunicorn` et écoute sur le port fourni par Render.
 
-Le niveau gratuit peut s'endormir et son système de fichiers est éphémère : les historiques SQLite peuvent être perdus lors d'un redémarrage ou redéploiement. Pour garder ces données durablement, utilisez un stockage persistant ou une base adaptée et configurez `TALK_TRANSLATE_DATABASE`. Le service de traduction et gTTS ont besoin d'un accès réseau sortant.
+Le niveau gratuit peut s'endormir et son système de fichiers est éphémère : les historiques SQLite peuvent être perdus lors d'un redémarrage ou redéploiement. Pour garder ces données durablement, utilisez un stockage persistant ou une base adaptée et configurez `TALK_TRANSLATE_DATABASE`. Le service de traduction et gTTS ont besoin d'un accès réseau sortant. MyMemory autorise gratuitement 5 000 caractères par jour sans compte, quota partagé par tous les visiteurs; le secours est donc destiné aux pannes courtes du service principal et peut être temporairement saturé.
 
 ### PythonAnywhere
 

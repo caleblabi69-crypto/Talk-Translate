@@ -18,7 +18,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 import config
 from services import storage
 from services.languages import get_languages, is_supported_language
-from services.translator import translate_text
+from services.translator import TranslationUnavailableError, translate_text
 from services.tts import generate_speech
 
 logger = logging.getLogger(__name__)
@@ -155,6 +155,18 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                 source,
                 target,
                 app.config["HISTORY_LIMIT"],
+            )
+        except TranslationUnavailableError as error:
+            if error.quota_exceeded:
+                logger.warning("Le quota quotidien MyMemory est épuisé")
+                return _error(
+                    "La traduction gratuite est temporairement saturée. Réessayez plus tard ou choisissez une autre langue source.",
+                    503,
+                )
+            logger.exception("Les fournisseurs de traduction ont échoué")
+            return _error(
+                "Les services de traduction sont indisponibles. Choisissez la langue source manuellement et réessayez.",
+                502,
             )
         except Exception:
             logger.exception("La traduction a échoué")

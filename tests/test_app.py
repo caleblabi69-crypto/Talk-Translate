@@ -244,6 +244,58 @@ def test_translation_service_caches_results(monkeypatch):
         translator.clear_translation_cache()
 
 
+def test_translation_uses_mymemory_when_google_is_unavailable(monkeypatch):
+    calls = []
+
+    class FailedGoogleTranslator:
+        def __init__(self, source, target):
+            pass
+
+        def translate(self, text):
+            raise RuntimeError("Google unavailable")
+
+    class FakeMyMemoryTranslator:
+        def __init__(self, source, target):
+            calls.append((source, target))
+
+        def translate(self, text):
+            return "Hello, how are you?"
+
+    monkeypatch.setattr(translator, "GoogleTranslator", FailedGoogleTranslator)
+    monkeypatch.setattr(translator, "MyMemoryTranslator", FakeMyMemoryTranslator)
+    translator.clear_translation_cache()
+    try:
+        result = translator.translate_text(
+            "Bonjour, comment allez-vous ?", "auto", "en"
+        )
+        assert result == ("Hello, how are you?", "fr")
+        assert calls == [("french", "english")]
+    finally:
+        translator.clear_translation_cache()
+
+
+def test_mymemory_fallback_requests_manual_source_for_ambiguous_short_text(monkeypatch):
+    class FailedGoogleTranslator:
+        def __init__(self, source, target):
+            pass
+
+        def translate(self, text):
+            raise RuntimeError("Google unavailable")
+
+    class UnusedMyMemoryTranslator:
+        def __init__(self, source, target):
+            raise AssertionError("A source should be detected before contacting MyMemory")
+
+    monkeypatch.setattr(translator, "GoogleTranslator", FailedGoogleTranslator)
+    monkeypatch.setattr(translator, "MyMemoryTranslator", UnusedMyMemoryTranslator)
+    translator.clear_translation_cache()
+    try:
+        with pytest.raises(translator.TranslationUnavailableError):
+            translator.translate_text("Hola", "auto", "en")
+    finally:
+        translator.clear_translation_cache()
+
+
 def test_audio_service_caches_mp3(monkeypatch):
     calls = []
 
