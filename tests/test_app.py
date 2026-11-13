@@ -1,9 +1,11 @@
 """Tests API ciblés sans dépendance au réseau."""
 
+import sqlite3
+
 import pytest
 
 import app as app_module
-from services import translator, tts
+from services import storage, translator, tts
 
 
 @pytest.fixture
@@ -123,6 +125,77 @@ def test_favorites_can_be_cleared(client):
     )
     assert client.delete("/api/favorites").get_json()["deleted"] == 1
     assert client.get("/api/favorites").get_json()["favorites"] == []
+
+
+def test_history_and_favorites_are_isolated_between_browsers(client):
+    other_browser = client.application.test_client()
+    history_id = client.post(
+        "/api/translate", json={"text": "Bonjour", "source": "fr", "target": "en"}
+    ).get_json()["history_id"]
+    assert other_browser.get("/api/history").get_json()["history"] == []
+    assert other_browser.delete(f"/api/history/{history_id}").status_code == 404
+    other_history_id = other_browser.post(
+        "/api/translate", json={"text": "Good morning", "source": "en", "target": "fr"}
+    ).get_json()["history_id"]
+    assert client.delete("/api/history").get_json()["deleted"] == 1
+    assert other_browser.get("/api/history").get_json()["history"][0]["id"] == other_history_id
+
+    favorite = {
+        "text": "Bonjour",
+        "translation": "Hello",
+        "source": "fr",
+        "target": "en",
+    }
+    first = client.post("/api/favorites", json=favorite)
+    second = other_browser.post("/api/favorites", json=favorite)
+    assert first.status_code == second.status_code == 201
+    assert first.get_json()["id"] != second.get_json()["id"]
+    assert client.get("/api/favorites").get_json()["favorites"][0]["id"] == first.get_json()["id"]
+    assert other_browser.get("/api/favorites").get_json()["favorites"][0]["id"] == second.get_json()["id"]
+    assert other_browser.delete(f"/api/favorites/{first.get_json()['id']}").status_code == 404
+    assert client.delete("/api/favorites").get_json()["deleted"] == 1
+    assert other_browser.get("/api/favorites").get_json()["favorites"][0]["id"] == second.get_json()["id"]
+
+
+def test_existing_database_records_are_kept_in_an_unassigned_partition(tmp_path):
+    database = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                text TEXT NOT NULL,
+                translation TEXT NOT NULL,
+                source TEXT NOT NULL,
+                target TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            INSERT INTO history(text, translation, source, target, created_at)
+            VALUES ('Bonjour', 'Hello', 'fr', 'en', '2026-01-01T00:00:00+00:00');
+            CREATE TABLE favorites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                text TEXT NOT NULL,
+                translation TEXT NOT NULL,
+                source TEXT NOT NULL,
+                target TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(text, translation, source, target)
+            );
+            INSERT INTO favorites(text, translation, source, target, created_at)
+            VALUES ('Bonjour', 'Hello', 'fr', 'en', '2026-01-01T00:00:00+00:00');
+            """
+        )
+
+    storage.initialize_database(database)
+    assert storage.list_history(database, "new-browser", 50) == []
+    assert storage.list_favorites(database, "new-browser") == []
+    assert storage.list_history(database, "legacy-unassigned", 50)[0]["text"] == "Bonjour"
+    assert storage.list_favorites(database, "legacy-unassigned")[0]["translation"] == "Hello"
+    new_id, created = storage.add_favorite(
+        database, "new-browser", "Bonjour", "Hello", "fr", "en"
+    )
+    assert created is True
+    assert new_id != 1
 
 
 def test_invalid_json_has_a_clear_error(client):

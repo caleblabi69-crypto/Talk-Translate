@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: talk-translate
+    runtime: python
+    plan: free
+    branch: caleblabi69-crypto-traduction-vocale
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 app:app
+    healthCheckPath: /
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"

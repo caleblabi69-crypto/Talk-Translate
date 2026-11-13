@@ -10,8 +10,9 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, current_app, jsonify, render_template, request, send_file
+from flask import Flask, Response, current_app, jsonify, render_template, request, send_file, session
 from flask.typing import ResponseReturnValue
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.exceptions import RequestEntityTooLarge
 
 import config
@@ -46,6 +47,15 @@ def _database_path() -> Path:
     return Path(current_app.config["DATABASE_PATH"])
 
 
+def _owner_id() -> str:
+    owner_id = session.get("owner_id")
+    if not isinstance(owner_id, str) or len(owner_id) != 32:
+        owner_id = uuid.uuid4().hex
+        session["owner_id"] = owner_id
+    session.permanent = True
+    return owner_id
+
+
 def _rate_limit_exceeded() -> bool:
     now = time.monotonic()
     window = current_app.config["RATE_LIMIT_WINDOW_SECONDS"]
@@ -73,6 +83,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     app.config.from_object(config)
     if test_config:
         app.config.update(test_config)
+    if not app.config.get("SECRET_KEY"):
+        app.config["SECRET_KEY"] = os.urandom(32)
+    if app.config.get("TRUST_PROXY"):
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
     app.config["RATE_LIMIT_BUCKET_ID"] = uuid.uuid4().hex
     app.config["DATABASE_PATH"] = str(app.config["DATABASE_PATH"])
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -131,9 +145,11 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         if source == target:
             return _error("Choisissez deux langues différentes.", 400)
         try:
+            owner_id = _owner_id()
             translation, detected_source = translate_text(text.strip(), source, target)
             history_id = storage.add_history(
                 _database_path(),
+                owner_id,
                 text.strip(),
                 translation,
                 source,
@@ -181,21 +197,23 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     @app.get("/api/history")
     def history() -> ResponseReturnValue:
-        return jsonify({"history": storage.list_history(_database_path(), app.config["HISTORY_LIMIT"])})
+        return jsonify(
+            {"history": storage.list_history(_database_path(), _owner_id(), app.config["HISTORY_LIMIT"])}
+        )
 
     @app.delete("/api/history/<int:item_id>")
     def remove_history_item(item_id: int) -> ResponseReturnValue:
-        if not storage.delete_history_item(_database_path(), item_id):
+        if not storage.delete_history_item(_database_path(), _owner_id(), item_id):
             return _error("Cette entrée d'historique est introuvable.", 404)
         return jsonify({"deleted": True})
 
     @app.delete("/api/history")
     def remove_history() -> ResponseReturnValue:
-        return jsonify({"deleted": storage.clear_history(_database_path())})
+        return jsonify({"deleted": storage.clear_history(_database_path(), _owner_id())})
 
     @app.get("/api/favorites")
     def favorites() -> ResponseReturnValue:
-        return jsonify({"favorites": storage.list_favorites(_database_path())})
+        return jsonify({"favorites": storage.list_favorites(_database_path(), _owner_id())})
 
     @app.post("/api/favorites")
     def save_favorite() -> ResponseReturnValue:
@@ -216,19 +234,19 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         if not is_supported_language(target):
             return _error("La langue cible est inconnue.", 400)
         item_id, created = storage.add_favorite(
-            _database_path(), text.strip(), translation.strip(), source, target
+            _database_path(), _owner_id(), text.strip(), translation.strip(), source, target
         )
         return jsonify({"id": item_id, "created": created}), 201 if created else 200
 
     @app.delete("/api/favorites/<int:item_id>")
     def remove_favorite(item_id: int) -> ResponseReturnValue:
-        if not storage.delete_favorite(_database_path(), item_id):
+        if not storage.delete_favorite(_database_path(), _owner_id(), item_id):
             return _error("Ce favori est introuvable.", 404)
         return jsonify({"deleted": True})
 
     @app.delete("/api/favorites")
     def remove_favorites() -> ResponseReturnValue:
-        return jsonify({"deleted": storage.clear_favorites(_database_path())})
+        return jsonify({"deleted": storage.clear_favorites(_database_path(), _owner_id())})
 
     return app
 

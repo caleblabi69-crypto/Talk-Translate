@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE_PATH = Path(
@@ -16,3 +17,9 @@ TRANSLATION_CACHE_SIZE = 256
 TTS_CACHE_SIZE = 64
 MAX_CONTENT_LENGTH = 16 * 1024
 DEBUG = os.environ.get("FLASK_DEBUG", "").lower() in {"1", "true", "yes"}
+SECRET_KEY = os.environ.get("SECRET_KEY")
+SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "").lower() in {"1", "true", "yes"}
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+PERMANENT_SESSION_LIFETIME = timedelta(days=365)
+TRUST_PROXY = os.environ.get("TRUST_PROXY", "").lower() in {"1", "true", "yes"}

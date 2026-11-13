@@ -39,7 +39,7 @@ Ouvrez <http://127.0.0.1:5000>. Le serveur écoute sur `0.0.0.0` pour les essais
 
 La reconnaissance se fait dans le navigateur via Web Speech API. La prise en charge, les langues offertes et le traitement audio varient selon le navigateur et son service vocal; Chrome et Edge sont généralement les mieux équipés. L'application n'enregistre ni n'envoie le flux audio elle-même, mais le navigateur peut transmettre l'audio à son propre service de reconnaissance. Le texte transcrit est envoyé au serveur Flask puis à GoogleTranslator pour traduction; le texte traduit est envoyé à gTTS pour produire l'audio. L'historique et les favoris sont conservés dans le fichier SQLite de l'instance.
 
-Il n'y a pas de compte ni d'isolation par utilisateur : sur une instance accessible publiquement, les utilisateurs partagent l'historique et les favoris et peuvent les lire ou les supprimer. Réservez une instance locale ou privée aux conversations sensibles.
+Il n'y a pas de compte : chaque navigateur reçoit un identifiant aléatoire conservé dans un cookie signé, HttpOnly et isolé de ceux des autres navigateurs. Historique et favoris sont séparés entre navigateurs, mais restent enregistrés sur le serveur; effacer les cookies du navigateur fait perdre l'accès à ses anciennes entrées. N'utilisez pas une instance publique pour des conversations sensibles.
 
 Le navigateur exige une permission micro et un contexte sécurisé. `localhost` est autorisé pour les essais sur l'ordinateur. Sur un téléphone, une adresse IP locale en HTTP ne garantit pas l'accès au micro : testez la saisie texte sur le réseau local ou utilisez une adresse HTTPS (par exemple l'URL HTTPS d'un déploiement Render).
 
@@ -75,12 +75,9 @@ python -m pytest
 
 ### Render
 
-Créez un Web Service depuis le dépôt, avec l'environnement Python :
+Le dépôt contient `render.yaml` pour créer automatiquement le Web Service. Dans Render, choisissez **New > Blueprint**, connectez le dépôt GitHub et sélectionnez la branche `caleblabi69-crypto-traduction-vocale`. Le Blueprint génère la clé de signature des cookies et configure HTTPS; Render fournit ensuite une URL publique `https://…onrender.com`. Le service utilise `gunicorn` et écoute sur le port fourni par Render.
 
-- **Build command** : `pip install -r requirements.txt`
-- **Start command** : `gunicorn --bind 0.0.0.0:$PORT app:app`
-
-Le plan gratuit peut avoir un système de fichiers éphémère. Le service peut donc redémarrer ou redéployer en perdant le fichier SQLite local. N'y conservez pas de données importantes sans stockage persistant. Le service de traduction et gTTS nécessitent un accès réseau sortant.
+Le niveau gratuit peut s'endormir et son système de fichiers est éphémère : les historiques SQLite peuvent être perdus lors d'un redémarrage ou redéploiement. Pour garder ces données durablement, utilisez un stockage persistant ou une base adaptée et configurez `TALK_TRANSLATE_DATABASE`. Le service de traduction et gTTS ont besoin d'un accès réseau sortant.
 
 ### PythonAnywhere
 
